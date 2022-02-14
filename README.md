@@ -41,11 +41,12 @@ on_add(o, "question", "What is the answer to the ultimate question?", CON_STRING
 int x = 42;
 on_add(o, "answer", &x, CON_INTEGER);
 
-on_print(o);
+char *str = on_dumps(o);
+printf("%s", str);
 ```
 
 
 ## TODO
 
-- [ ] add dump to file
+- [x] add dump to file
 - [ ] fix error checking
