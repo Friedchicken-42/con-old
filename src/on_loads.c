@@ -21,7 +21,10 @@ char *on_read_string(const char *data, int *length) {
     *length = 1;
 
     while(data[*length] != '"') {
-        if(data[*length] == '\\') *length += 1;
+        if(data[*length] == '\\') {
+            *length += 1;
+            if(data[*length] == 'u') *length += 3;
+        }
         *length += 1;
     }
 
@@ -46,58 +49,126 @@ int on_read_single(const char *data, const char *string) {
     return i;
 }
 
-float *on_read_float(const char *data, int length) {
-    float *number = (float*)malloc(sizeof(float));
-    *number = 0;
-    int radix = 0;
-
-    for(int i = 0; i < length; i++) {
-        if(radix > 0) radix *= 10;
-        if(data[i] == '.') radix = 1;
-        else *number = *number * 10 + (int)(data[i] - '0');
-    }
-    *number /= radix;
-
-    return number;
+char on_is_digit(const char chr) {
+    return chr >= '0' && chr <= '9';
 }
 
-int *on_read_int(const char *data, int length) {
-    int *number = (int*)malloc(sizeof(int));
-    *number = 0;
+int on_read_integer(const char *data, int *size) {
+    int number = 0;
+    char sign = 1;
+    
+    if(data[0] == '-') {
+        sign = -1;
+        *size += 1;
+    }
+    
 
-    for(int i = 0; i < length; i++) {
-        *number = *number * 10 + (int)(data[i] - '0');
+    if(data[*size] == '0') {
+        *size += 1;
+    } else if (on_is_digit(data[*size])) {
+        while(on_is_digit(data[*size])) {
+            number = (number * 10) + (int)(data[*size] - '0');
+            *size += 1;
+        }
+    } else {
+        *size = -1;
     }
 
-    return number;
+    return sign * number;
+}
+
+int on_read_fraction(const char *data, int *length, int *size) {
+    int fraction = 0;
+
+    if(data[*size] == '.') {
+        *size += 1;
+        while(on_is_digit(data[*size])) {
+            fraction = (fraction * 10) + (int)(data[*size] - '0');
+            *size += 1;
+            *length += 1; 
+        }
+    }
+
+    return fraction;
+}
+
+int on_read_exponent(const char *data, int *size) {
+    int exponent = 0;
+    char sign = 1;
+
+    if(data[*size] == 'e' || data[*size] == 'E') {
+        *size += 1;
+        if(data[*size] == '-') {
+            sign = -1;
+            *size += 1;
+        } else if (data[*size] == '+') {
+            *size += 1;
+        } else if(!on_is_digit(data[*size])) {
+            *size = -1;
+            return 0;
+        }
+        
+        while(on_is_digit(data[*size])) {
+            exponent = (exponent * 10) + (int)(data[*size] - '0');
+            *size += 1;
+        }
+    }
+
+    return sign * exponent;
 }
 
 void *on_read_number(const char *data, int *length, enum ValueType *type) {
-    int size = 1;
-    char isFloat = 0;
+    int size = 0;
+    int number = 0;
+    int fraction = 0;
+    int fraction_size = 0;
+    int exponent = 0;
 
-    while(1) {
-        if(data[size] == '.') {
-            if (isFloat) {
-                *length = -1;
-                return NULL;
-            }
-            isFloat = 1;
-        } else if (data[size] < '0' || data[size] > '9') {
-            break;
+    number = on_read_integer(data, &size);
+    if(size < 0) {
+        *length = -1;
+        return NULL;
+    }
+
+    fraction = on_read_fraction(data, &fraction_size, &size);
+    
+    exponent = on_read_exponent(data, &size);
+    if(size < 0) {
+        *length = -1;
+        return NULL;
+    }
+
+    void *value = NULL;
+
+    if(fraction == 0 && exponent >= 0) {
+        value = (int*)malloc(sizeof(int));
+        *(int*)value = number; 
+        *type = CON_INTEGER;
+    } else {
+        value = (float*)malloc(sizeof(float));
+        *(float*)value = number;
+        *type = CON_FLOAT;
+    }
+
+    float fr = fraction;
+    if(fraction != 0) {
+        for(int i = 0; i < fraction_size; i++) fr /= 10;
+        *(float*)value += fr;
+    }
+
+    int abs_exp = exponent < 0 ? -exponent : exponent;
+    for(int i = 0; i < abs_exp; i++) {
+        if(*type == CON_INTEGER) {
+            *(int*)value *= 10;
+        } else if(exponent > 0) {
+            *(float*)value *= 10;
+        } else {
+            *(float*)value /= 10;
         }
-        size++;
     }
 
     *length = size;
-
-    if (isFloat) {
-        *type = CON_FLOAT;
-        return on_read_float(data, size);
-    } else {
-        *type = CON_INTEGER;
-        return on_read_int(data, size);
-    }
+    return value;
 }
 
 void *on_read_value(const char *data, int *length, enum ValueType *type) {
@@ -241,6 +312,7 @@ Object *on_load(const char* filename) {
 
     int status = on_loads(o, data);
     free(data);
+    if(status == -1) return NULL;
 
     return o;
 }

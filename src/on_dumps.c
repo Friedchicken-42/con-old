@@ -63,7 +63,7 @@ int on_sndumps_on(Object *o, char *buffer, int size, int tab) {
 int on_sndumps(Object *o, char *buffer, int size) {
     int length = 0;
     length += snprintf(buffer, size, "{\n");
-    length += on_sndumps_on(o, buffer, size, 1);
+    if(o != NULL) length += on_sndumps_on(o, buffer, size, 1);
     length += snprintf(buffer, size, "%s}\n", buffer);
     return length;
 }
