@@ -26,7 +26,8 @@ void *on_get(Object *o, const char *key);
 void *on_get_array(Object *o, int index);
 int on_add(Object *o, const char *key, void *data, enum ValueType type);
 
-void on_print(Object *o);
+char *on_dumps(Object *o);
+void on_dump(Object *o, const char* filename);
 
 int on_loads(Object *o, const char* data);
 Object *on_load(const char* filename);

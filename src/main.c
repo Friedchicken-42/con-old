@@ -9,5 +9,6 @@ int main(int argc, char **argv) {
     }
 
     Object *o = on_load(argv[1]);
-    on_print(o);
+    char *str = on_dumps(o);
+    printf("%s", str);
 }
