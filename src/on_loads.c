@@ -2,12 +2,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+int on_loads_on(Object *o, const char *data);
+int on_read_composite(Object *o, const char *data, enum ValueType type);
+
 int on_whitespace(const char *data) {
     int length = 0;
     while(1) {
         switch(data[length]) {
             case ' ':
             case '\t':
+            case '\r':
             case '\n':
                 length++;
                 break;
@@ -18,6 +22,10 @@ int on_whitespace(const char *data) {
 }
 
 char *on_read_string(const char *data, int *length) {
+    if (data[0] != '"') {
+        return NULL;
+        *length = -1;
+    }
     *length = 1;
 
     while(data[*length] != '"') {
@@ -104,6 +112,10 @@ int on_read_exponent(const char *data, int *size) {
         } else if (data[*size] == '+') {
             *size += 1;
         } else if(!on_is_digit(data[*size])) {
+            *size = -1;
+            return 0;
+        }
+        if(!on_is_digit(data[*size])) {
             *size = -1;
             return 0;
         }
@@ -203,14 +215,11 @@ void *on_read_value(const char *data, int *length, enum ValueType *type) {
     return NULL;
 }
 
-int on_read_composite(Object *o, const char *data, enum ValueType type);
-
 int on_read_array(Object *o, const char *data) {
     int offset = 1;
     int off = 0;
-    char *key = NULL;
     void *value = NULL;
-    enum ValueType type;
+    enum ValueType type = 0;
     int index = 0;
     Object *x = NULL;
 
@@ -229,9 +238,15 @@ int on_read_array(Object *o, const char *data) {
         }
 
         offset += on_whitespace(data + offset);
-        if(data[offset] == ',') offset++;
+        if(data[offset] == ',') {
+            offset++;
+            offset += on_whitespace(data + offset);
+            if(data[offset] == ']' || data[offset] == '}') return -1;
+        }
         index++;
     }
+    
+    offset += on_whitespace(data + offset);
 
     return offset + 1;
 }
@@ -239,14 +254,14 @@ int on_read_array(Object *o, const char *data) {
 int on_read_composite(Object *o, const char *data, enum ValueType type) {
     int offset = 0;
 
-    if(type == CON_OBJECT) offset = on_loads(o, data);
+    if(type == CON_OBJECT) offset = on_loads_on(o, data);
     else if(type == CON_ARRAY) offset = on_read_array(o, data);
     else return -1;
 
     return offset;
 }
 
-int on_loads(Object *o, const char *data) {
+int on_loads_on(Object *o, const char *data) {
     long offset = 1;
     int off = 0;
 
@@ -273,7 +288,7 @@ int on_loads(Object *o, const char *data) {
         value = on_read_value(data + offset, &off, &type);
         if(off < 0) return -1;
         offset += off;
-
+        
         on_add(o, key, value, type);
 
         if(type == CON_OBJECT || type == CON_ARRAY) {
@@ -291,28 +306,44 @@ int on_loads(Object *o, const char *data) {
         if(data[offset] == ',') {
             offset++;
             offset += on_whitespace(data + offset);
+            if(data[offset] == ']' || data[offset] == '}') return -1;
         }
     }
+    
+    offset += on_whitespace(data + offset);
 
     return offset + 1;
 }
 
-Object *on_load(const char* filename) {
+Object *on_loads(const char* data) {
     Object *o = on_create();
+    int status = -1;
 
-    FILE *f = fopen(filename, "r");
+    if(data[0] == '{') status = on_loads_on(o, data);
+    else if(data[0] == '[') status = on_read_array(o, data);
+
+    if(status == -1) return NULL;
+    status += on_whitespace(data + status);
+
+    if(data[status] != '\0') return NULL;
+
+    return o;
+}
+
+Object *on_load(const char* filename) {
+    FILE *f = fopen(filename, "rb");
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    char *data = malloc(size + 1);
+    char *data = NULL;
+    data = malloc(size + 1);
     fread(data, size, 1, f);
     data[size] = '\0';
     fclose(f);
 
-    int status = on_loads(o, data);
+    Object *o = on_loads(data);
     free(data);
-    if(status == -1) return NULL;
 
     return o;
 }

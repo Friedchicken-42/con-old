@@ -5,6 +5,7 @@
 
 Object *on_create() {
     Object *o = (Object*)malloc(sizeof(Object));
+    if(o == NULL) exit(-1);
     o->key = NULL;
     o->value = NULL;
     o->next = NULL;
@@ -17,13 +18,9 @@ void on_add_key(Object *o, const char *key) {
     int length = 1;
     while(key[length] != '\0') length++;
     o->key = malloc(length + 1);
+    if(o->key == NULL) exit(-1);
     strcpy(o->key, key);
 }
-
-#define _on_malloc(T) do{\
-    o->value = (T*)malloc(sizeof(T));\
-    if(data) *(T*)o->value = *(T*)data; \
-}while(0);
 
 void on_add_string(Object *o, char *data) {
     int length = 1;
@@ -31,9 +28,17 @@ void on_add_string(Object *o, char *data) {
         length++;
     }
 
-    o->value = (char*)malloc(length);
+    o->value = (char*)malloc(length + 1);
+    if(o->value == NULL) exit(-1);
     strcpy(o->value, data);
+    ((char*)o->value)[length] = '\0';
 }
+
+#define _on_malloc(T) do{\
+    o->value = (T*)malloc(sizeof(T));\
+    if(o->value == NULL) exit(-1);\
+    if(data) *(T*)o->value = *(T*)data; \
+}while(0);
 
 void on_add_value(Object *o, void *data) {
     switch(o->type) {
@@ -58,26 +63,6 @@ void on_add_value(Object *o, void *data) {
     }
 }
 
-void on_free(Object *o) {
-    free(o->value);
-    free(o);
-}
-
-void on_remove(Object *o) {
-    if(o->prev != NULL) o->prev->next = o->next;
-    if(o->next != NULL) o->next->prev = o->prev;
-
-    if(o->type == CON_ARRAY || o->type == CON_OBJECT) {
-        Object *v = o->value;
-        while(v) {
-            on_remove(v);
-            v = v->next;
-        }
-    }
-
-    on_free(o);
-}
-
 Object *on_get_on(Object *o, const char *key) {
     Object *curr = o;
     while(curr->prev) curr = curr->prev;
@@ -85,6 +70,12 @@ Object *on_get_on(Object *o, const char *key) {
         if(strcmp(curr->key, key) == 0) return curr;
         curr = curr->next;
     }
+    return NULL;
+}
+
+void *on_get(Object *o, const char *key) {
+    Object *x = on_get_on(o, key);
+    if(x) return x->value;
     return NULL;
 }
 
@@ -97,6 +88,25 @@ void *on_get_array(Object *o, int index) {
     return curr->value;
 }
 
+void on_free(Object *o) {
+    if(o->key) free(o->key);
+
+    if(o->type == CON_OBJECT || o->type == CON_ARRAY) on_clean(o->value);
+    else free(o->value);
+
+    free(o);
+}
+
+void on_remove(Object **o, Object *del) {
+    if(*o == NULL || del == NULL) return;
+
+    if(*o == del) *o = del->next;
+    if(del->next != NULL) del->next->prev = del->prev;
+    if(del->prev != NULL) del->prev->next = del->next;
+
+    on_free(del);
+}
+
 int on_add(Object *o, const char *key, void *data, enum ValueType type) {
     if(o == NULL) return -1;
 
@@ -105,7 +115,7 @@ int on_add(Object *o, const char *key, void *data, enum ValueType type) {
     if(o->type != CON_EMPTY) {
         if(o->key) {
             Object *temp = on_get_on(o, key);
-            if(temp) on_remove(temp);
+            if(temp) on_remove(&o, temp);
         }
         while(curr->next) curr = curr->next;
         curr->next = on_create();
@@ -121,13 +131,6 @@ int on_add(Object *o, const char *key, void *data, enum ValueType type) {
     return 0;
 }
 
-void *on_get(Object *o, const char *key) {
-    Object *x = on_get_on(o, key);
-    if(x) return x->value;
-    return NULL;
-}
-
-void on_del(Object *o, const char *key) {
-    Object *x = on_get_on(o, key);
-    if(x) on_remove(x);
+void on_clean(Object *o) {
+    while(o) on_remove(&o, o);
 }

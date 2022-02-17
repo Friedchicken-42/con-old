@@ -3,73 +3,77 @@
 #include "on.h"
 
 int on_tabs(char *buffer, int size, int tab) {
-    for(int i = 0; i < tab; i++) snprintf(buffer, size, "%s\t", buffer);
-    return tab;
+    int offset = 0;
+    for(int i = 0; i < tab; i++) offset += snprintf(buffer + offset, size, "\t");
+    return offset;
 }
 
 int on_sndumps_on(Object *o, char *buffer, int size, int tab) {
+    int offset = 0;
     Object *curr = o;
-    int length = 0;
 
     while(curr != NULL) {
-        length += on_tabs(buffer, size, tab);
+        offset += on_tabs(buffer + offset, size, tab);
 
-        if(curr->key) length += snprintf(buffer, size, "%s\"%s\": ", buffer, curr->key);
+        if(curr->key) offset += snprintf(buffer + offset, size, "\"%s\": ", curr->key);
 
         switch(curr->type) {
             case CON_EMPTY:
                 break;
             case CON_INTEGER:
-                length += snprintf(buffer, size, "%s%d", buffer, *(int*)curr->value);
+                offset += snprintf(buffer + offset, size, "%d", *(int*)curr->value);
                 break;
             case CON_FLOAT:
-                length += snprintf(buffer, size, "%s%f", buffer, *(float*)curr->value);
+                offset += snprintf(buffer + offset, size, "%f", *(float*)curr->value);
                 break;
             case CON_STRING:
-                length += snprintf(buffer, size, "%s\"%s\"", buffer, (char*)curr->value);
+                offset += snprintf(buffer + offset, size, "\"%s\"", (char*)curr->value);
                 break;
             case CON_TRUE:
-                length += snprintf(buffer, size, "%strue", buffer);
+                offset += snprintf(buffer + offset, size, "true");
                 break;
             case CON_FALSE:
-                length += snprintf(buffer, size, "%sfalse", buffer);
+                offset += snprintf(buffer + offset, size, "false");
                 break;
             case CON_NULL:
-                length += snprintf(buffer, size, "%snull", buffer);
+                offset += snprintf(buffer + offset, size, "null");
                 break;
             case CON_ARRAY:
-                length += snprintf(buffer, size, "%s[\n", buffer);
-                length += on_sndumps_on(curr->value, buffer, size, tab + 1);
-                length += on_tabs(buffer, size, tab);
-                length += snprintf(buffer, size, "%s]", buffer);
+                offset += snprintf(buffer + offset, size, "[\n");
+                offset += on_sndumps_on(curr->value, buffer + offset, size, tab + 1);
+                offset += on_tabs(buffer + offset, size, tab);
+                offset += snprintf(buffer + offset, size, "]");
                 break;
             case CON_OBJECT:
-                length += snprintf(buffer, size, "%s{\n", buffer);
-                length += on_sndumps_on(curr->value, buffer, size, tab + 1);
-                length += on_tabs(buffer, size, tab);
-                length += snprintf(buffer, size, "%s}", buffer);
+                offset += snprintf(buffer + offset, size, "{\n");
+                offset += on_sndumps_on(curr->value, buffer + offset, size, tab + 1);
+                offset += on_tabs(buffer + offset, size, tab);
+                offset += snprintf(buffer + offset, size, "}");
                 break;
             default:
                 break;
         }
 
         curr = curr->next;
-        if(curr) length += snprintf(buffer, size, "%s,", buffer);
-        length += snprintf(buffer, size, "%s\n", buffer);
+        if(curr) offset += snprintf(buffer + offset, size, ",");
+        offset += snprintf(buffer + offset, size, "\n");
     }
-    return length;
+    
+    return offset;
 }
 
 int on_sndumps(Object *o, char *buffer, int size) {
-    int length = 0;
-    length += snprintf(buffer, size, "{\n");
-    if(o != NULL) length += on_sndumps_on(o, buffer, size, 1);
-    length += snprintf(buffer, size, "%s}\n", buffer);
-    return length;
+    int offset = 0;
+    printf("type %d\n", o->type);
+    offset += snprintf(buffer + offset, size, "{\n");
+    if(o != NULL) offset += on_sndumps_on(o, buffer + offset, size, 1);
+    offset += snprintf(buffer + offset, size, "}\n");
+    return offset;
 }
 
 char *on_dumps(Object *o) {
     int length = on_sndumps(o, NULL, 0);
+    printf("length %d\n", length);
     char *string = (char*)malloc(length + 1);
 
     on_sndumps(o, string, length);
