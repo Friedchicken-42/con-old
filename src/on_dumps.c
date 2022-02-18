@@ -63,17 +63,16 @@ int on_sndumps_on(Object *o, char *buffer, int size, int tab) {
 }
 
 int on_sndumps(Object *o, char *buffer, int size) {
+    if(o == NULL) return snprintf(buffer, size, "{}");
     int offset = 0;
-    printf("type %d\n", o->type);
-    offset += snprintf(buffer + offset, size, "{\n");
-    if(o != NULL) offset += on_sndumps_on(o, buffer + offset, size, 1);
-    offset += snprintf(buffer + offset, size, "}\n");
+    offset += snprintf(buffer + offset, size, o->key ? "{\n" : "[\n");
+    offset += on_sndumps_on(o, buffer + offset, size, 1);
+    offset += snprintf(buffer + offset, size, o->key ? "}\n" : "]\n");
     return offset;
 }
 
 char *on_dumps(Object *o) {
     int length = on_sndumps(o, NULL, 0);
-    printf("length %d\n", length);
     char *string = (char*)malloc(length + 1);
 
     on_sndumps(o, string, length);
