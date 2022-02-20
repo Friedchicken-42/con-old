@@ -229,6 +229,9 @@ int on_read_array(Object *o, const char *data) {
         if(off < 0) return -1;
         offset += off;
         on_add(o, NULL, value, type);
+        free(value);
+
+        offset += on_whitespace(data + offset);
 
         if(type == CON_OBJECT || type == CON_ARRAY) {
             x = on_get_array(o, index);
@@ -316,11 +319,16 @@ int on_loads_on(Object *o, const char *data) {
 }
 
 Object *on_loads(const char* data) {
-    Object *o = on_create();
+    Object *o = NULL;
     int status = -1;
 
-    if(data[0] == '{') status = on_loads_on(o, data);
-    else if(data[0] == '[') status = on_read_array(o, data);
+    if(data[0] == '{') {
+        o = on_create_on();
+        status = on_loads_on(o, data);
+    } else if(data[0] == '[') {
+        o = on_create_array();
+        status = on_read_array(o, data);
+    }
 
     if(status == -1) return NULL;
     status += on_whitespace(data + status);

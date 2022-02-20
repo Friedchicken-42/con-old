@@ -16,11 +16,13 @@ struct Object_t {
     char *key;
     void *value;
     enum ValueType type;
+    enum ValueType parent;
     Object *next;
     Object *prev;
 };
 
-Object *on_create();
+Object *on_create_on();
+Object *on_create_array();
 Object *on_get_on(Object *o, const char *key);
 void *on_get(Object *o, const char *key);
 void *on_get_array(Object *o, int index);

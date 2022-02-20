@@ -14,6 +14,18 @@ Object *on_create() {
     return o;
 }
 
+Object *on_create_on() {
+    Object *o = on_create();
+    o->parent = CON_OBJECT;
+    return o;
+}
+
+Object *on_create_array() {
+    Object *o = on_create();
+    o->parent = CON_ARRAY;
+    return o;
+}
+
 void on_add_key(Object *o, const char *key) {
     int length = 1;
     while(key[length] != '\0') length++;
@@ -57,8 +69,10 @@ void on_add_value(Object *o, void *data) {
         case CON_EMPTY:
             break;
         case CON_ARRAY:
+            o->value = on_create_array();
+            break;
         case CON_OBJECT:
-            o->value = on_create();
+            o->value = on_create_on();
             break;
     }
 }
@@ -112,6 +126,8 @@ int on_add(Object *o, const char *key, void *data, enum ValueType type) {
 
     Object *curr = o;
 
+    enum ValueType parent = curr->parent;
+
     if(o->type != CON_EMPTY) {
         if(o->key) {
             Object *temp = on_get_on(o, key);
@@ -122,6 +138,10 @@ int on_add(Object *o, const char *key, void *data, enum ValueType type) {
         curr->next->prev = curr;
         curr = curr->next;
     }
+    curr->parent = parent;
+
+    if(parent == CON_OBJECT && key == NULL) return -1;
+    if(parent == CON_ARRAY && key != NULL) return -1;
 
     if(key) on_add_key(curr, key);
     curr->type = type;

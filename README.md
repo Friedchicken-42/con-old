@@ -36,7 +36,7 @@ Run the program
 ```c
 #include "on.h"
 
-Object *o = on_create();
+Object *o = on_create_on();
 on_add(o, "question", "What is the answer to the ultimate question?", CON_STRING);
 int x = 42;
 on_add(o, "answer", &x, CON_INTEGER);
