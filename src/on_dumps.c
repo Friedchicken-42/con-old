@@ -69,7 +69,7 @@ int on_sndumps(Object *o, char *buffer, int size, char is_write) {
     int offset = 0;
     offset += snprintf(is_write ? buffer + offset : NULL, size, o->parent == CON_OBJECT ? "{\n" : "[\n");
     offset += on_sndumps_on(o, buffer + offset, size, 1, is_write);
-    offset += snprintf(is_write ? buffer + offset : NULL, size, o->parent == CON_OBJECT ? "}\n" : "]\n");
+    offset += snprintf(is_write ? buffer + offset : NULL, size, o->parent == CON_OBJECT ? "}" : "]");
     return offset;
 }
 

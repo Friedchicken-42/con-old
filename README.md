@@ -21,7 +21,7 @@ Go to the project directory
 Compile (will probably add a Makefile)
 
 ```bash
-  gcc -o on src/*.c
+  gcc -o on src/*.c main.c
 ```
 
 Run the program
@@ -42,7 +42,20 @@ int x = 42;
 on_add(o, "answer", &x, CON_INTEGER);
 
 char *str = on_dumps(o);
-printf("%s", str);
+printf("%s\n", str);
+```
+
+
+## Testing
+
+Compile with the testing library
+```bash
+  gcc -o test src/*.c test.c
+```
+
+Run the tests
+```bash
+  ./on
 ```
 
 
