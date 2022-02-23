@@ -15,6 +15,23 @@ enum ConError {
     CONERR_EXTRA_CHARACTERS,
 };
 
+void on_print_error_message(const char *data, int offset, enum ConError err) {
+    char *convert[] = {
+        [CONERR_OK] = "",
+        [CONERR_MISSING_QUOTATION] = "Missing \"\"\" in string",
+        [CONERR_MISSING_COLON] = "Missing \":\" after key",
+        [CONERR_MISMATCHING_WORD] = "Wrong single word",
+        [CONERR_NAN] = "Not a Number",
+        [CONERR_EXTRA_COMMA] = "Extra comma before closing",
+        [CONERR_NOT_AN_OBJECT] = "Expected Object",
+        [CONERR_NOT_AN_ARRAY] = "Expected Array",
+        [CONERR_NOT_COMPOSITE] = "Expected Object or Array",
+        [CONERR_EXTRA_CHARACTERS] = "Extra character after end of object",
+    };
+    
+    fprintf(stderr, "Error %02d: \"%s\" on position %d: \"%c\"\n", err, convert[err], offset, data[offset]);
+}
+
 int on_loads_on(Object *o, const char *data, int *offset);
 int on_read_composite(Object *o, const char *data, int *offset, enum ValueType type);
 
@@ -320,7 +337,7 @@ Object *on_loads(const char* data) {
     }
 
     if(err) {
-        fprintf(stderr, "Error: %d\n", err);
+        on_print_error_message(data, offset, err);
         return NULL;
     }
 
@@ -328,7 +345,7 @@ Object *on_loads(const char* data) {
 
     if(data[offset] != '\0') {
         err = CONERR_EXTRA_CHARACTERS;
-        fprintf(stderr, "Error: %d\n", err);
+        on_print_error_message(data, offset, err);
         return NULL;
     }
 
