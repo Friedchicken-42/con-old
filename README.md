@@ -62,4 +62,4 @@ Run the tests
 ## TODO
 
 - [x] add dump to file
-- [ ] fix error checking
+- [x] fix error checking
