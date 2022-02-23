@@ -222,7 +222,6 @@ int on_read_value(const char *data, int *offset, enum ValueType *type, void **va
 }
 
 int on_read_array(Object *o, const char *data, int *offset) {
-    void *value = NULL;
     enum ValueType type = 0;
     int index = 0;
     Object *x = NULL;
@@ -231,7 +230,10 @@ int on_read_array(Object *o, const char *data, int *offset) {
     if(data[*offset] != '[') return CONERR_NOT_AN_ARRAY;
     (*offset)++;
 
+    on_whitespace(data, offset);
+
     while(data[*offset] != ']') {
+        void *value = NULL;
         on_whitespace(data, offset);
         err = on_read_value(data, offset, &type, &value);
         if(err) return err;
