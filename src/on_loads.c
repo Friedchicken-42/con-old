@@ -2,338 +2,335 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int on_loads_on(Object *o, const char *data);
-int on_read_composite(Object *o, const char *data, enum ValueType type);
+enum ConError {
+    CONERR_OK = 0,
+    CONERR_MISSING_QUOTATION,
+    CONERR_MISSING_COLON,
+    CONERR_MISMATCHING_WORD,
+    CONERR_NAN,
+    CONERR_EXTRA_COMMA,
+    CONERR_NOT_AN_OBJECT,
+    CONERR_NOT_AN_ARRAY,
+    CONERR_NOT_COMPOSITE,
+    CONERR_EXTRA_CHARACTERS,
+};
 
-int on_whitespace(const char *data) {
-    int length = 0;
+int on_loads_on(Object *o, const char *data, int *offset);
+int on_read_composite(Object *o, const char *data, int *offset, enum ValueType type);
+
+int on_whitespace(const char *data, int *offset) {
     while(1) {
-        switch(data[length]) {
+        switch(data[*offset]) {
             case ' ':
             case '\t':
             case '\r':
             case '\n':
-                length++;
+                (*offset)++;
                 break;
             default:
-                return length;
+                return CONERR_OK;
         }
     }
 }
 
-char *on_read_string(const char *data, int *length) {
-    if (data[0] != '"') {
-        return NULL;
-        *length = -1;
-    }
-    *length = 1;
+int on_read_string(const char *data, int *offset, char **strp) {
+    if (data[*offset] != '"') return CONERR_MISSING_QUOTATION;
 
-    while(data[*length] != '"') {
-        if(data[*length] == '\\') {
-            *length += 1;
-            if(data[*length] == 'u') *length += 3;
+    (*offset)++;
+    int length = 0;
+    const char *string = data + *offset;
+
+    while(string[length] != '"') {
+        if(string[length] == '\\') {
+            length++;
+            if(string[length] == 'u') length += 3;
         }
-        *length += 1;
+        length++;
     }
 
-    char *str = (char*)malloc(*length);
-    for(int i = 0; i < *length - 1; i++) {
-        str[i] = data[i + 1];
+    *strp = (char*)malloc(length + 1);
+    for(int i = 0; i < length; i++) {
+        (*strp)[i] = string[i];
     }
-    str[*length - 1] = '\0';
-    *length += 1;
+    (*strp)[length] = '\0';
 
-    return str;
+    *offset += length + 1;
+
+    return CONERR_OK;
 }
 
-int on_read_single(const char *data, const char *string) {
-    int i = 0;
-
-    while(string[i] != '\0') {
-        if (data[i] != string[i]) return -1;
-        i++;
+int on_read_single(const char *data, int* offset, const char *string) {
+    for(int i = 0; string[i] != '\0'; i++, (*offset)++) {
+        if (data[*offset] != string[i]) return CONERR_MISMATCHING_WORD;
     }
 
-    return i;
+    return CONERR_OK;
 }
 
 char on_is_digit(const char chr) {
     return chr >= '0' && chr <= '9';
 }
 
-int on_read_integer(const char *data, int *size) {
-    int number = 0;
+int on_read_integer(const char *data, int *offset, int *number) {
     char sign = 1;
     
-    if(data[0] == '-') {
+    if(data[*offset] == '-') {
         sign = -1;
-        *size += 1;
+        (*offset)++;
     }
     
 
-    if(data[*size] == '0') {
-        *size += 1;
-    } else if (on_is_digit(data[*size])) {
-        while(on_is_digit(data[*size])) {
-            number = (number * 10) + (int)(data[*size] - '0');
-            *size += 1;
+    if(data[*offset] == '0') {
+        (*offset)++;
+    } else if (on_is_digit(data[*offset])) {
+        while(on_is_digit(data[*offset])) {
+            *number = (*number * 10) + (int)(data[*offset] - '0');
+            (*offset)++;
         }
     } else {
-        *size = -1;
+        return CONERR_NAN;
     }
 
-    return sign * number;
+    *number = sign * *number;
+
+    return CONERR_OK;
 }
 
-int on_read_fraction(const char *data, int *length, int *size) {
-    int fraction = 0;
-
-    if(data[*size] == '.') {
-        *size += 1;
-        while(on_is_digit(data[*size])) {
-            fraction = (fraction * 10) + (int)(data[*size] - '0');
-            *size += 1;
-            *length += 1; 
+int on_read_fraction(const char *data, int *offset, int *fraction) {
+    if(data[*offset] == '.') {
+        (*offset)++;
+        while(on_is_digit(data[*offset])) {
+            *fraction = (*fraction * 10) + (int)(data[*offset] - '0');
+            (*offset)++;
         }
     }
 
-    return fraction;
+    return CONERR_OK;
 }
 
-int on_read_exponent(const char *data, int *size) {
-    int exponent = 0;
+int on_read_exponent(const char *data, int *offset, int *exponent) {
     char sign = 1;
 
-    if(data[*size] == 'e' || data[*size] == 'E') {
-        *size += 1;
-        if(data[*size] == '-') {
-            sign = -1;
-            *size += 1;
-        } else if (data[*size] == '+') {
-            *size += 1;
-        } else if(!on_is_digit(data[*size])) {
-            *size = -1;
-            return 0;
-        }
-        if(!on_is_digit(data[*size])) {
-            *size = -1;
-            return 0;
-        }
-        
-        while(on_is_digit(data[*size])) {
-            exponent = (exponent * 10) + (int)(data[*size] - '0');
-            *size += 1;
-        }
+    if(data[*offset] != 'e' && data[*offset] != 'E') return CONERR_OK;
+
+    (*offset)++;
+
+    if(data[*offset] == '-') sign = -1;
+    else if (data[*offset] == '+') sign = 1;
+    else if(on_is_digit(data[*offset])) (*offset)--;
+    else return CONERR_NAN;
+
+    (*offset)++;
+
+    if(!on_is_digit(data[*offset])) return CONERR_NAN;
+
+    while(on_is_digit(data[*offset])) {
+        *exponent = (*exponent * 10) + (int)(data[*offset] - '0');
+        (*offset)++;
     }
 
-    return sign * exponent;
+    *exponent = sign * *exponent;
+
+    return CONERR_OK;
 }
 
-void *on_read_number(const char *data, int *length, enum ValueType *type) {
-    int size = 0;
+int on_read_number(const char *data, int *offset, enum ValueType *type, void **value) {
     int number = 0;
     int fraction = 0;
-    int fraction_size = 0;
     int exponent = 0;
+    int err = 0;
 
-    number = on_read_integer(data, &size);
-    if(size < 0) {
-        *length = -1;
-        return NULL;
-    }
+    err = on_read_integer(data, offset, &number);
+    if(err) return err;
 
-    fraction = on_read_fraction(data, &fraction_size, &size);
+    err = on_read_fraction(data, offset, &fraction);
+    if(err) return err;
     
-    exponent = on_read_exponent(data, &size);
-    if(size < 0) {
-        *length = -1;
-        return NULL;
-    }
-
-    void *value = NULL;
+    err = on_read_exponent(data, offset, &exponent);
+    if(err) return err;
 
     if(fraction == 0 && exponent >= 0) {
-        value = (int*)malloc(sizeof(int));
-        *(int*)value = number; 
+        *value = (int*)malloc(sizeof(int));
+        *(int*)*value = number; 
         *type = CON_INTEGER;
     } else {
-        value = (float*)malloc(sizeof(float));
-        *(float*)value = number;
+        *value = (float*)malloc(sizeof(float));
+        *(float*)*value = number;
         *type = CON_FLOAT;
     }
 
     float fr = fraction;
     if(fraction != 0) {
-        for(int i = 0; i < fraction_size; i++) fr /= 10;
-        *(float*)value += fr;
+        while((int)fr != 0) fr /= 10;
+        *(float*)*value += fr;
     }
 
     int abs_exp = exponent < 0 ? -exponent : exponent;
     for(int i = 0; i < abs_exp; i++) {
         if(*type == CON_INTEGER) {
-            *(int*)value *= 10;
+            *(int*)*value *= 10;
         } else if(exponent > 0) {
-            *(float*)value *= 10;
+            *(float*)*value *= 10;
         } else {
-            *(float*)value /= 10;
+            *(float*)*value /= 10;
         }
     }
 
-    *length = size;
-    return value;
+    return CONERR_OK;
 }
 
-void *on_read_value(const char *data, int *length, enum ValueType *type) {
-    *length = 0;
-
-    switch(data[0]) {
+int on_read_value(const char *data, int *offset, enum ValueType *type, void **value) {
+    switch(data[*offset]) {
         case '"':
             *type = CON_STRING; 
-            return on_read_string(data, length);
+            return on_read_string(data, offset, (char**)value);
         case 't':
             *type = CON_TRUE;
-            *length = on_read_single(data, "true");
-            break;
+            return on_read_single(data, offset, "true");
         case 'f':
             *type = CON_FALSE;
-            *length = on_read_single(data, "false");
-            break;
+            return on_read_single(data, offset, "false");
         case 'n':
             *type = CON_NULL;
-            *length = on_read_single(data, "null");
-            break;
+            return on_read_single(data, offset, "null");
         case '{':
             *type = CON_OBJECT;
-            break;
+            return CONERR_OK;
         case '[':
             *type = CON_ARRAY;
-            break;
+            return CONERR_OK;
         default:
-            return on_read_number(data, length, type);
+            return on_read_number(data, offset, type, value);
     }
-
-    return NULL;
 }
 
-int on_read_array(Object *o, const char *data) {
-    int offset = 1;
-    int off = 0;
+int on_read_array(Object *o, const char *data, int *offset) {
     void *value = NULL;
     enum ValueType type = 0;
     int index = 0;
     Object *x = NULL;
+    int err = 0;
 
-    while(data[offset] != ']') {
-        offset += on_whitespace(data + offset);
-        value = on_read_value(data + offset, &off, &type);
-        if(off < 0) return -1;
-        offset += off;
+    if(data[*offset] != '[') return CONERR_NOT_AN_ARRAY;
+    (*offset)++;
+
+    while(data[*offset] != ']') {
+        on_whitespace(data, offset);
+        err = on_read_value(data, offset, &type, &value);
+        if(err) return err;
+
         on_add(o, NULL, value, type);
         free(value);
 
-        offset += on_whitespace(data + offset);
+        on_whitespace(data, offset);
 
         if(type == CON_OBJECT || type == CON_ARRAY) {
             x = on_get_array(o, index);
-            off = on_read_composite(x, data + offset, type);
-            if(off < 0) return -1;
-            offset += off;
+            err = on_read_composite(x, data, offset, type);
+            if(err) return err;
         }
 
-        offset += on_whitespace(data + offset);
-        if(data[offset] == ',') {
-            offset++;
-            offset += on_whitespace(data + offset);
-            if(data[offset] == ']' || data[offset] == '}') return -1;
+        on_whitespace(data, offset);
+        if(data[*offset] == ',') {
+            (*offset)++;
+            on_whitespace(data, offset);
+            if(data[*offset] == ']' || data[*offset] == '}') return CONERR_EXTRA_COMMA;
         }
         index++;
     }
     
-    offset += on_whitespace(data + offset);
+    on_whitespace(data, offset);
+    (*offset)++;
 
-    return offset + 1;
+    return CONERR_OK;
 }
 
-int on_read_composite(Object *o, const char *data, enum ValueType type) {
-    int offset = 0;
+int on_read_composite(Object *o, const char *data, int *offset, enum ValueType type) {
+    int err = 0;
 
-    if(type == CON_OBJECT) offset = on_loads_on(o, data);
-    else if(type == CON_ARRAY) offset = on_read_array(o, data);
-    else return -1;
+    if(type == CON_OBJECT) err = on_loads_on(o, data, offset);
+    else if(type == CON_ARRAY) err = on_read_array(o,  data, offset);
+    else return CONERR_NOT_COMPOSITE;
 
-    return offset;
+    return err;
 }
 
-int on_loads_on(Object *o, const char *data) {
-    long offset = 1;
-    int off = 0;
+int on_loads_on(Object *o, const char *data, int *offset) {
+    if(data[*offset] != '{') return CONERR_NOT_AN_OBJECT;
+    (*offset)++;
 
-    if(data[0] != '{') return -1;
+    on_whitespace(data, offset);
 
-    offset += on_whitespace(data + offset);
-
-    while(data[offset] != '}') {
+    while(data[*offset] != '}') {
         char *key = NULL;
         void *value = NULL;
         enum ValueType type;
+        int err = 0;
 
-        key = on_read_string(data + offset, &off);
-        if(off < 0) return -1;
-        offset += off;
+        err = on_read_string(data, offset, &key);
+        if(err) return err;
 
-        offset += on_whitespace(data + offset);
+        on_whitespace(data, offset);
 
-        if(data[offset] != ':') return -1;
-        offset++;
+        if(data[*offset] != ':') return CONERR_MISSING_COLON;
+        (*offset)++;
 
-        offset += on_whitespace(data + offset);
+        on_whitespace(data, offset);
 
-        value = on_read_value(data + offset, &off, &type);
-        if(off < 0) return -1;
-        offset += off;
+        on_read_value(data, offset, &type, &value);
+        if(err) return err;
         
         on_add(o, key, value, type);
 
         if(type == CON_OBJECT || type == CON_ARRAY) {
             Object *x = on_get(o, key);
-            off = on_read_composite(x, data + offset, type);
-            if(off < 0) return -1;
-            offset += off;
+            err = on_read_composite(x, data, offset, type);
+            if(err) return err;
         }
 
         free(key);
         free(value);
 
-        offset += on_whitespace(data + offset);
+        on_whitespace(data, offset);
 
-        if(data[offset] == ',') {
-            offset++;
-            offset += on_whitespace(data + offset);
-            if(data[offset] == ']' || data[offset] == '}') return -1;
+        if(data[*offset] == ',') {
+            (*offset)++;
+            on_whitespace(data, offset);
+            if(data[*offset] == ']' || data[*offset] == '}') return CONERR_EXTRA_COMMA;
         }
     }
     
-    offset += on_whitespace(data + offset);
+    on_whitespace(data, offset);
+    (*offset)++;
 
-    return offset + 1;
+    return CONERR_OK;
 }
 
 Object *on_loads(const char* data) {
     Object *o = NULL;
-    int status = -1;
+    int offset = 0;
+    int err = 0;
 
     if(data[0] == '{') {
         o = on_create_on();
-        status = on_loads_on(o, data);
+        err = on_loads_on(o, data, &offset);
     } else if(data[0] == '[') {
         o = on_create_array();
-        status = on_read_array(o, data);
+        err = on_read_array(o, data, &offset);
     }
 
-    if(status == -1) return NULL;
-    status += on_whitespace(data + status);
+    if(err) {
+        fprintf(stderr, "Error: %d\n", err);
+        return NULL;
+    }
 
-    if(data[status] != '\0') return NULL;
+    on_whitespace(data, &offset);
+
+    if(data[offset] != '\0') {
+        err = CONERR_EXTRA_CHARACTERS;
+        fprintf(stderr, "Error: %d\n", err);
+        return NULL;
+    }
 
     return o;
 }
