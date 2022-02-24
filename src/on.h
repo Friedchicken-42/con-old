@@ -1,3 +1,6 @@
+#ifndef ON_H
+#define ON_H
+
 enum ValueType {
     CON_EMPTY,
     CON_STRING,
@@ -29,8 +32,4 @@ void *on_get_array(Object *o, int index);
 int on_add(Object *o, const char *key, void *data, enum ValueType type);
 void on_clean(Object *o);
 
-char *on_dumps(Object *o);
-void on_dump(Object *o, const char* filename);
-
-Object *on_loads(const char* data);
-Object *on_load(const char* filename);
+#endif

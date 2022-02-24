@@ -1,7 +1,7 @@
 
 # CON
 
-C Object Notation, aka JSON support in C
+C Object Notation, aka C support for JSON and other configuration files
 
 
 ## Run Locally
@@ -18,16 +18,16 @@ Go to the project directory
   cd con-master
 ```
 
-Compile (will probably add a Makefile)
+Compile
 
 ```bash
-  gcc -o on src/*.c main.c
+  make main
 ```
 
 Run the program
 
 ```bash
-  ./on <filename>
+  ./main <filename>
 ```
 
 
@@ -35,13 +35,14 @@ Run the program
 
 ```c
 #include "on.h"
+#include "json/json.h"
 
-Object *o = on_create_on();
+Object *o = json_create_on();
 on_add(o, "question", "What is the answer to the ultimate question?", CON_STRING);
 int x = 42;
 on_add(o, "answer", &x, CON_INTEGER);
 
-char *str = on_dumps(o);
+char *str = json_dumps(o);
 printf("%s\n", str);
 ```
 
@@ -50,12 +51,12 @@ printf("%s\n", str);
 
 Compile with the testing library
 ```bash
-  gcc -o test src/*.c test.c
+  make test
 ```
 
 Run the tests
 ```bash
-  ./on
+  ./test
 ```
 
 
@@ -63,3 +64,5 @@ Run the tests
 
 - [x] add dump to file
 - [x] fix error checking
+- [ ] better makefile
+- [ ] add parser for yaml/toml/ini
